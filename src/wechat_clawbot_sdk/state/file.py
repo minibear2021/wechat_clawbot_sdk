@@ -6,6 +6,7 @@ import sys
 from asyncio import to_thread
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any, cast
 
 from ..errors import ValidationError
 from ..models import AccountSession, PollCursor
@@ -21,13 +22,13 @@ def resolve_default_state_dir() -> Path:
     if os.name == "nt":
         appdata = os.environ.get("APPDATA")
         if appdata:
-            return Path(appdata) / "wechat-clawbot-sdk"
+            return Path(appdata) / "wechat_clawbot_sdk"
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "wechat-clawbot-sdk"
+        return Path.home() / "Library" / "Application Support" / "wechat_clawbot_sdk"
     xdg_state_home = os.environ.get("XDG_STATE_HOME")
     if xdg_state_home:
-        return Path(xdg_state_home).expanduser() / "wechat-clawbot-sdk"
-    return Path.home() / ".local" / "state" / "wechat-clawbot-sdk"
+        return Path(xdg_state_home).expanduser() / "wechat_clawbot_sdk"
+    return Path.home() / ".local" / "state" / "wechat_clawbot_sdk"
 
 
 class FileStateStore:
@@ -44,7 +45,7 @@ class FileStateStore:
         payload = await self._read_json(path)
         if payload is None:
             raise ValidationError(f"unknown account_id: {account_id}")
-        return AccountSession(**payload)
+        return AccountSession(**cast(dict[str, Any], payload))
 
     async def save_poll_cursor(self, account_id: str, cursor: PollCursor) -> None:
         path = self._poll_cursor_path(account_id)
@@ -54,7 +55,7 @@ class FileStateStore:
         payload = await self._read_json(self._poll_cursor_path(account_id))
         if payload is None:
             return PollCursor()
-        return PollCursor(**payload)
+        return PollCursor(**cast(dict[str, Any], payload))
 
     async def save_context_token(
         self,

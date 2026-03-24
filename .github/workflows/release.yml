@@ -59,7 +59,7 @@ jobs:
           PACKAGE_VERSION: ${{ github.ref_name }}
         run: |
           VERSION="${PACKAGE_VERSION#v}"
-          python -m pip install --upgrade --force-reinstall --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ "wechat-clawbot-sdk==${VERSION}"
+          python -m pip install --upgrade --force-reinstall --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ "wechat_clawbot_sdk==${VERSION}"
           python -c "import wechat_clawbot_sdk; print(wechat_clawbot_sdk.__version__)"
 
       - name: Create Release

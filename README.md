@@ -1,6 +1,6 @@
-# wechat-clawbot-sdk
+# wechat_clawbot_sdk
 
-`wechat-clawbot-sdk` 是一个面向微信 ClawBot 的 Python SDK，提供登录、轮询、消息发送、媒体处理和状态持久化等能力。
+`wechat_clawbot_sdk` 是一个面向微信 ClawBot 的 Python SDK，提供登录、轮询、消息发送、媒体处理和状态持久化等能力。
 
 用于完成以下能力：
 
@@ -27,7 +27,7 @@
 ## 安装
 
 ```bash
-pip install wechat-clawbot-sdk
+pip install wechat_clawbot_sdk
 ```
 
 ## 快速开始
@@ -168,9 +168,9 @@ if status.logged_in and status.session is not None:
 
 默认状态目录：
 
-- Windows: `%APPDATA%/wechat-clawbot-sdk`
-- macOS: `~/Library/Application Support/wechat-clawbot-sdk`
-- Linux: `$XDG_STATE_HOME/wechat-clawbot-sdk` 或 `~/.local/state/wechat-clawbot-sdk`
+- Windows: `%APPDATA%/wechat_clawbot_sdk`
+- macOS: `~/Library/Application Support/wechat_clawbot_sdk`
+- Linux: `$XDG_STATE_HOME/wechat_clawbot_sdk` 或 `~/.local/state/wechat_clawbot_sdk`
 
 你可以通过环境变量或参数覆盖：
 
