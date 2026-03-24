@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wechat-clawbot"
+dynamic = ["version"]
+description = "Python SDK for WeChat ClawBot"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "minibear2021" }
+]
+dependencies = [
+  "cryptography>=45,<46",
+  "httpx>=0.27,<1",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.dynamic]
+version = {attr = "wechat_clawbot.version.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
