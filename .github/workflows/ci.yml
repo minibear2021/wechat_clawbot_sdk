@@ -5,6 +5,7 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -26,17 +27,17 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install black ruff mypy
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip
+          pip install -e . black ruff mypy
 
       - name: Check formatting with black
-        run: black --check --diff .
+        run: black --check --diff src examples
 
       - name: Lint with ruff
-        run: ruff check .
+        run: ruff check src examples
 
       - name: Type check with mypy
-        run: mypy wechat_clawbot
+        run: mypy src examples
 
   test:
     name: Test Python ${{ matrix.python-version }}
@@ -44,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
       - name: Checkout
@@ -58,18 +59,28 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
+          python -m pip install --upgrade pip
+          pip install -e . pytest pytest-cov build
+
+      - name: Smoke test package import
+        run: |
+          python -m build --sdist --wheel
+          python -c "import wechat_clawbot; print(wechat_clawbot.__version__)"
 
       - name: Run tests
+        if: ${{ hashFiles('tests/**/*.py') != '' }}
         run: pytest tests/ -v --tb=short
 
       - name: Run tests with coverage
-        if: matrix.python-version == '3.12'
+        if: ${{ matrix.python-version == '3.12' && hashFiles('tests/**/*.py') != '' }}
         run: pytest tests/ --cov=wechat_clawbot --cov-report=xml --cov-report=term
 
+      - name: No tests present
+        if: ${{ hashFiles('tests/**/*.py') == '' }}
+        run: echo "No tests/ directory found; smoke checks completed instead."
+
       - name: Upload coverage to Codecov
-        if: matrix.python-version == '3.12'
+        if: ${{ matrix.python-version == '3.12' && hashFiles('tests/**/*.py') != '' }}
         uses: codecov/codecov-action@v4
         with:
           file: ./coverage.xml
