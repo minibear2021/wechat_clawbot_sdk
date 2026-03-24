@@ -168,7 +168,7 @@ class AsyncMessageServiceImpl:
             self._logger.info("downloading remote media url=%s", media.remote_url)
             return await download_remote_media_to_temp(
                 media.remote_url,
-                Path(gettempdir()) / "wechat_clawbot" / "outbound",
+                Path(gettempdir()) / "wechat_clawbot_sdk" / "outbound",
                 logger=self._logger.child("transfer"),
             )
         raise MediaError("media payload requires local_path or remote_url")

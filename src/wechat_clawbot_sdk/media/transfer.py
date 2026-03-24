@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import io
 import secrets
 from dataclasses import dataclass
 from hashlib import md5
@@ -15,6 +16,7 @@ from .._logging import SdkLogger, create_sdk_logger
 from ..cdn import aes_ecb_padded_size, build_cdn_download_url, build_cdn_upload_url, decrypt_aes_ecb, encrypt_aes_ecb
 from ..errors import MediaError
 from .mime import get_extension_from_content_type_or_url, get_mime_from_filename
+from .silk_transcode import silk_to_wav
 
 
 WEIXIN_MEDIA_MAX_BYTES = 100 * 1024 * 1024
@@ -63,7 +65,7 @@ async def download_remote_media_to_temp(
         if len(content) > WEIXIN_MEDIA_MAX_BYTES:
             raise MediaError("remote media exceeds supported size limit")
         ext = get_extension_from_content_type_or_url(response.headers.get("content-type"), url)
-        target_dir = Path(dest_dir) if dest_dir is not None else Path(gettempdir()) / "wechat_clawbot"
+        target_dir = Path(dest_dir) if dest_dir is not None else Path(gettempdir()) / "wechat_clawbot_sdk"
         target_dir.mkdir(parents=True, exist_ok=True)
         target = target_dir / f"weixin-remote-{md5(url.encode('utf-8')).hexdigest()[:12]}{ext}"
         target.write_bytes(content)
@@ -109,7 +111,7 @@ async def download_inbound_media_item(
 ) -> DownloadedMedia | None:
     resolved_logger = logger or create_sdk_logger().child("transfer")
     item_type = item.get("type")
-    target_dir = Path(dest_dir) if dest_dir is not None else Path(gettempdir()) / "wechat_clawbot" / "inbound"
+    target_dir = Path(dest_dir) if dest_dir is not None else Path(gettempdir()) / "wechat_clawbot_sdk" / "inbound"
     target_dir.mkdir(parents=True, exist_ok=True)
     resolved_logger.debug("download inbound media item_type=%s target_dir=%s", item_type, target_dir)
 
@@ -139,7 +141,13 @@ async def download_inbound_media_item(
         if not isinstance(encrypted_query_param, str) or not isinstance(aes_key_base64, str):
             return None
         buffer = await download_and_decrypt_buffer(encrypted_query_param, aes_key_base64, cdn_base_url, logger=resolved_logger)
-        target = target_dir / "voice.bin"
+        resolved_logger.debug("downloaded voice buffer size=%s, attempting silk transcode", len(buffer))
+        wav_buffer = silk_to_wav(buffer, logger=resolved_logger)
+        if wav_buffer is not None:
+            target = target_dir / "voice.wav"
+            target.write_bytes(wav_buffer)
+            return DownloadedMedia(local_path=target, mime_type="audio/wav")
+        target = target_dir / "voice.silk"
         target.write_bytes(buffer)
         return DownloadedMedia(local_path=target, mime_type="audio/silk")
 

@@ -1,4 +1,5 @@
 from .mime import get_extension_from_content_type_or_url, get_extension_from_mime, get_mime_from_filename
+from .silk_transcode import silk_to_wav
 from .transfer import (
 	DownloadedMedia,
 	UploadedFileInfo,
@@ -25,5 +26,6 @@ __all__ = [
 	"get_mime_from_filename",
 	"parse_aes_key",
 	"prepare_upload",
+	"silk_to_wav",
 	"upload_buffer_to_cdn",
 ]

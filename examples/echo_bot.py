@@ -5,24 +5,25 @@ import logging
 import os
 from pathlib import Path
 
-from wechat_clawbot import (
+from wechat_clawbot_sdk import (
     AsyncWeChatBotClient,
     DEFAULT_CDN_BASE_URL,
     DEFAULT_LOGIN_BASE_URL,
     DEFAULT_STATE_DIR_ENV_VAR,
     PollEvent,
     PollEventType,
+    download_inbound_media_item,
     resolve_default_state_dir,
 )
-from wechat_clawbot.api import TypingStatus
+from wechat_clawbot_sdk.api import TypingStatus
 
 
-LOGGER_NAME = "wechat_clawbot.echo_bot"
+LOGGER_NAME = "wechat_clawbot_sdk.echo_bot"
 DEFAULT_LOG_LEVEL = "INFO"
 
 
 def setup_logging() -> logging.Logger:
-    level_name = read_env("WECHAT_CLAWBOT_LOG_LEVEL", default=DEFAULT_LOG_LEVEL) or DEFAULT_LOG_LEVEL
+    level_name = read_env("WECHAT_CLAWBOT_SDK_LOG_LEVEL", default=DEFAULT_LOG_LEVEL) or DEFAULT_LOG_LEVEL
     level = getattr(logging, level_name.upper(), logging.INFO)
     logging.basicConfig(
         level=level,
@@ -114,9 +115,88 @@ def build_echo_reply(event: PollEvent) -> str | None:
     return f"echo: {'; '.join(parts)}"
 
 
+def extract_media_items(event: PollEvent) -> list[dict[str, object]]:
+    message = event.message
+    if message is None:
+        return []
+    item_list = message.raw_message.get("item_list")
+    if not isinstance(item_list, list):
+        return []
+    media_items: list[dict[str, object]] = []
+    for item in item_list:
+        if not isinstance(item, dict):
+            continue
+        item_type = item.get("type")
+        if item_type in {2, 3, 4, 5}:
+            media_items.append(item)
+    return media_items
+
+
+async def send_echo_media(
+    client: AsyncWeChatBotClient,
+    event: PollEvent,
+    *,
+    cdn_base_url: str,
+) -> int:
+    logger = logging.getLogger(LOGGER_NAME)
+    sent_count = 0
+    for item in extract_media_items(event):
+        downloaded = await download_inbound_media_item(
+            item,
+            cdn_base_url=cdn_base_url,
+            logger=logging.getLogger("wechat_clawbot_sdk"),
+        )
+        if downloaded is None:
+            logger.warning(
+                "skip unsupported media item account_id=%s user_id=%s item_type=%s",
+                event.account_id,
+                event.message.user_id if event.message else None,
+                item.get("type"),
+            )
+            continue
+
+        local_path = downloaded.local_path
+        try:
+            if downloaded.mime_type.startswith("image/"):
+                await client.send_image(
+                    account_id=event.account_id,
+                    user_id=event.message.user_id,
+                    local_path=local_path,
+                    filename=local_path.name,
+                    mime_type=downloaded.mime_type,
+                )
+            elif downloaded.mime_type.startswith("video/"):
+                await client.send_video(
+                    account_id=event.account_id,
+                    user_id=event.message.user_id,
+                    local_path=local_path,
+                    filename=local_path.name,
+                    mime_type=downloaded.mime_type,
+                )
+            else:
+                await client.send_file(
+                    account_id=event.account_id,
+                    user_id=event.message.user_id,
+                    local_path=local_path,
+                    filename=local_path.name,
+                    mime_type=downloaded.mime_type,
+                )
+            sent_count += 1
+            logger.info(
+                "echo media sent account_id=%s user_id=%s file=%s mime=%s",
+                event.account_id,
+                event.message.user_id,
+                local_path.name,
+                downloaded.mime_type,
+            )
+        finally:
+            local_path.unlink(missing_ok=True)
+    return sent_count
+
+
 async def resolve_account_session(client: AsyncWeChatBotClient):
     logger = logging.getLogger(LOGGER_NAME)
-    account_id = read_env("WECHAT_CLAWBOT_ACCOUNT_ID")
+    account_id = read_env("WECHAT_CLAWBOT_SDK_ACCOUNT_ID")
     if account_id:
         status = await client.get_account_status(account_id)
         if status.logged_in and status.session is not None:
@@ -146,18 +226,19 @@ async def resolve_account_session(client: AsyncWeChatBotClient):
     account = await client.wait_for_login(qrcode_session.qrcode)
     logger.info("logged in as %s", account.account_id)
     logger.info(
-        "set WECHAT_CLAWBOT_ACCOUNT_ID=%s to reuse this persisted session on the next run",
+        "set WECHAT_CLAWBOT_SDK_ACCOUNT_ID=%s to reuse this persisted session on the next run",
         account.account_id,
     )
     return account
 
 
-async def handle_event(client: AsyncWeChatBotClient, event: PollEvent) -> None:
+async def handle_event(client: AsyncWeChatBotClient, event: PollEvent, *, cdn_base_url: str) -> None:
     logger = logging.getLogger(LOGGER_NAME)
     if event.event_type is not PollEventType.MESSAGE or event.message is None:
         return
     reply_text = build_echo_reply(event)
-    if reply_text is None:
+    has_media_items = bool(extract_media_items(event))
+    if reply_text is None and not has_media_items:
         logger.info("ignoring unsupported message account_id=%s user_id=%s", event.account_id, event.message.user_id)
         return
     logger.info(
@@ -175,12 +256,21 @@ async def handle_event(client: AsyncWeChatBotClient, event: PollEvent) -> None:
     try:
         logger.info("typing started, waiting 10 seconds before reply")
         await asyncio.sleep(10)
-        await client.send_text(
-            account_id=event.account_id,
-            user_id=event.message.user_id,
-            text=reply_text,
-        )
-        logger.info("echo reply sent account_id=%s user_id=%s", event.account_id, event.message.user_id)
+        if reply_text is not None:
+            await client.send_text(
+                account_id=event.account_id,
+                user_id=event.message.user_id,
+                text=reply_text,
+            )
+            logger.info("echo text sent account_id=%s user_id=%s", event.account_id, event.message.user_id)
+        if has_media_items:
+            sent_count = await send_echo_media(client, event, cdn_base_url=cdn_base_url)
+            logger.info(
+                "echo media completed account_id=%s user_id=%s sent_count=%s",
+                event.account_id,
+                event.message.user_id,
+                sent_count,
+            )
     finally:
         await client.send_typing(
             account_id=event.account_id,
@@ -192,33 +282,31 @@ async def handle_event(client: AsyncWeChatBotClient, event: PollEvent) -> None:
 
 async def main() -> None:
     logger = setup_logging()
-    debug_enabled = (read_env("WECHAT_CLAWBOT_DEBUG", default="0") or "0").strip().lower() in {
+    debug_enabled = (read_env("WECHAT_CLAWBOT_SDK_DEBUG", default="0") or "0").strip().lower() in {
         "1",
         "true",
         "yes",
         "on",
     }
+    cdn_base_url = read_env("WECHAT_CLAWBOT_SDK_CDN_BASE_URL", default=DEFAULT_CDN_BASE_URL) or DEFAULT_CDN_BASE_URL
     logger.info("starting echo bot")
     client = AsyncWeChatBotClient.create(
-        login_base_url=read_env(
-            "WECHAT_CLAWBOT_LOGIN_BASE_URL",
-            default=DEFAULT_LOGIN_BASE_URL,
-        )
+        login_base_url=read_env("WECHAT_CLAWBOT_SDK_LOGIN_BASE_URL", default=DEFAULT_LOGIN_BASE_URL)
         or DEFAULT_LOGIN_BASE_URL,
-        cdn_base_url=read_env(
-            "WECHAT_CLAWBOT_CDN_BASE_URL",
-            default=DEFAULT_CDN_BASE_URL,
-        )
-        or DEFAULT_CDN_BASE_URL,
-        state_dir=os.environ.get(DEFAULT_STATE_DIR_ENV_VAR),
-        logger=logging.getLogger("wechat_clawbot"),
+        cdn_base_url=cdn_base_url,
+        state_dir=read_env(DEFAULT_STATE_DIR_ENV_VAR),
+        logger=logging.getLogger("wechat_clawbot_sdk"),
         debug=debug_enabled,
     )
     account = await resolve_account_session(client)
     logger.info("begin consuming events for account_id=%s", account.account_id)
 
     try:
-        await client.consume_events(account.account_id, lambda event: handle_event(client, event), message_only=True)
+        await client.consume_events(
+            account.account_id,
+            lambda event: handle_event(client, event, cdn_base_url=cdn_base_url),
+            message_only=True,
+        )
     finally:
         logger.info("closing echo bot")
         await client.close()

@@ -27,7 +27,6 @@ from .state import (
     DEFAULT_STATE_DIR_ENV_VAR,
     FileStateStore,
     InMemoryStateStore,
-    LEGACY_STATE_DIR_ENV_VAR,
     resolve_default_state_dir,
 )
 from .media import (
@@ -77,7 +76,6 @@ __all__ = [
     "InboundMessage",
     "InMemoryStateStore",
     "is_media_item",
-    "LEGACY_STATE_DIR_ENV_VAR",
     "LoginSession",
     "LoggerLike",
     "MediaError",

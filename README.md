@@ -1,6 +1,6 @@
-# wechat-clawbot
+# wechat-clawbot-sdk
 
-`wechat-clawbot` 是一个面向微信 ClawBot 的 Python SDK，提供登录、轮询、消息发送、媒体处理和状态持久化等能力。
+`wechat-clawbot-sdk` 是一个面向微信 ClawBot 的 Python SDK，提供登录、轮询、消息发送、媒体处理和状态持久化等能力。
 
 用于完成以下能力：
 
@@ -27,7 +27,7 @@
 ## 安装
 
 ```bash
-pip install wechat-clawbot
+pip install wechat-clawbot-sdk
 ```
 
 ## 快速开始
@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import asyncio
 
-from wechat_clawbot import AsyncWeChatBotClient, PollEventType
+from wechat_clawbot_sdk import AsyncWeChatBotClient, PollEventType
 
 
 async def main() -> None:
@@ -122,7 +122,7 @@ SDK 内部已经实现 typing keepalive：
 调用示例：
 
 ```python
-from wechat_clawbot.api import TypingStatus
+from wechat_clawbot_sdk.api import TypingStatus
 
 await client.send_typing(
 	account_id=account_id,
@@ -168,19 +168,19 @@ if status.logged_in and status.session is not None:
 
 默认状态目录：
 
-- Windows: `%APPDATA%/wechat-clawbot`
-- macOS: `~/Library/Application Support/wechat-clawbot`
-- Linux: `$XDG_STATE_HOME/wechat-clawbot` 或 `~/.local/state/wechat-clawbot`
+- Windows: `%APPDATA%/wechat-clawbot-sdk`
+- macOS: `~/Library/Application Support/wechat-clawbot-sdk`
+- Linux: `$XDG_STATE_HOME/wechat-clawbot-sdk` 或 `~/.local/state/wechat-clawbot-sdk`
 
 你可以通过环境变量或参数覆盖：
 
-- 环境变量：`WECHAT_CLAWBOT_STATE_DIR`
+- 环境变量：`WECHAT_CLAWBOT_SDK_STATE_DIR`
 - 工厂参数：`state_dir=`
 
 如果你只想使用内存态，不写磁盘：
 
 ```python
-from wechat_clawbot import AsyncWeChatBotClient, InMemoryStateStore
+from wechat_clawbot_sdk import AsyncWeChatBotClient, InMemoryStateStore
 
 
 client = AsyncWeChatBotClient.create(state_store=InMemoryStateStore())
@@ -193,10 +193,10 @@ SDK 支持接入标准库 `logging`。
 ```python
 import logging
 
-from wechat_clawbot import AsyncWeChatBotClient
+from wechat_clawbot_sdk import AsyncWeChatBotClient
 
 
-logger = logging.getLogger("wechat_clawbot_demo")
+logger = logging.getLogger("wechat_clawbot_sdk_demo")
 client = AsyncWeChatBotClient.create(logger=logger, debug=True)
 ```
 

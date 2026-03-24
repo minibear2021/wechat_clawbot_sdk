@@ -59,7 +59,7 @@ class SdkLogger:
         self._logger.exception(self._format(message), *args, **kwargs)
 
     def _format(self, message: str) -> str:
-        return f"[wechat_clawbot:{self._component}] {message}"
+        return f"[wechat_clawbot_sdk:{self._component}] {message}"
 
 
 def create_sdk_logger(

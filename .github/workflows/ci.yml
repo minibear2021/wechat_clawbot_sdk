@@ -65,7 +65,7 @@ jobs:
       - name: Smoke test package import
         run: |
           python -m build --sdist --wheel
-          python -c "import wechat_clawbot; print(wechat_clawbot.__version__)"
+          python -c "import wechat_clawbot_sdk; print(wechat_clawbot_sdk.__version__)"
 
       - name: Run tests
         if: ${{ hashFiles('tests/**/*.py') != '' }}
@@ -73,7 +73,7 @@ jobs:
 
       - name: Run tests with coverage
         if: ${{ matrix.python-version == '3.12' && hashFiles('tests/**/*.py') != '' }}
-        run: pytest tests/ --cov=wechat_clawbot --cov-report=xml --cov-report=term
+        run: pytest tests/ --cov=wechat_clawbot_sdk --cov-report=xml --cov-report=term
 
       - name: No tests present
         if: ${{ hashFiles('tests/**/*.py') == '' }}
