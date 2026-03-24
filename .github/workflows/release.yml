@@ -8,14 +8,12 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:
     name: Build and Release
     runs-on: ubuntu-latest
-    env:
-      TEST_PYPI_API_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
-      PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,21 +41,20 @@ jobs:
           python -c "import wechat_clawbot; print(wechat_clawbot.__version__)"
 
       - name: Publish to TestPyPI
-        if: startsWith(github.ref, 'refs/tags/') && env.TEST_PYPI_API_TOKEN != ''
+        if: startsWith(github.ref, 'refs/tags/')
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
-          password: ${{ env.TEST_PYPI_API_TOKEN }}
           skip-existing: true
 
       - name: Wait for TestPyPI package availability
-        if: startsWith(github.ref, 'refs/tags/') && env.TEST_PYPI_API_TOKEN != ''
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           echo "Waiting 30 seconds for TestPyPI to process the package..."
           sleep 30
 
       - name: Test install from TestPyPI
-        if: startsWith(github.ref, 'refs/tags/') && env.TEST_PYPI_API_TOKEN != ''
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           PACKAGE_VERSION: ${{ github.ref_name }}
         run: |
@@ -75,7 +72,5 @@ jobs:
           prerelease: false
 
       - name: Publish to PyPI
-        if: startsWith(github.ref, 'refs/tags/') && env.PYPI_API_TOKEN != ''
+        if: startsWith(github.ref, 'refs/tags/')
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ env.PYPI_API_TOKEN }}
