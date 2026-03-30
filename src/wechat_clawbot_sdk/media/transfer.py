@@ -22,6 +22,7 @@ from .silk_transcode import silk_to_wav
 WEIXIN_MEDIA_MAX_BYTES = 100 * 1024 * 1024
 UPLOAD_MAX_RETRIES = 3
 MEDIA_HTTP_USER_AGENT = "node"
+ENABLE_CDN_URL_FALLBACK = True
 
 
 @dataclass(slots=True)
@@ -74,13 +75,19 @@ async def download_remote_media_to_temp(
 
 
 async def download_plain_cdn_buffer(
-    encrypted_query_param: str,
+    encrypted_query_param: str | None,
     cdn_base_url: str,
     *,
+    full_url: str | None = None,
     logger: SdkLogger | None = None,
 ) -> bytes:
     resolved_logger = logger or create_sdk_logger().child("transfer")
-    url = build_cdn_download_url(encrypted_query_param, cdn_base_url)
+    if full_url:
+        url = full_url
+    elif encrypted_query_param and ENABLE_CDN_URL_FALLBACK:
+        url = build_cdn_download_url(encrypted_query_param, cdn_base_url)
+    else:
+        raise MediaError("CDN download URL missing (need full_url or encrypt_query_param)")
     resolved_logger.debug("download cdn buffer url=%s", url)
     async with httpx.AsyncClient(follow_redirects=True) as client:
         response = await client.get(url, headers={"User-Agent": MEDIA_HTTP_USER_AGENT})
@@ -90,14 +97,20 @@ async def download_plain_cdn_buffer(
 
 
 async def download_and_decrypt_buffer(
-    encrypted_query_param: str,
+    encrypted_query_param: str | None,
     aes_key_base64: str,
     cdn_base_url: str,
     *,
+    full_url: str | None = None,
     logger: SdkLogger | None = None,
 ) -> bytes:
     resolved_logger = logger or create_sdk_logger().child("transfer")
-    encrypted = await download_plain_cdn_buffer(encrypted_query_param, cdn_base_url, logger=resolved_logger)
+    encrypted = await download_plain_cdn_buffer(
+        encrypted_query_param,
+        cdn_base_url,
+        full_url=full_url,
+        logger=resolved_logger,
+    )
     resolved_logger.debug("decrypt cdn buffer size=%s", len(encrypted))
     return decrypt_aes_ecb(encrypted, parse_aes_key(aes_key_base64))
 
@@ -119,15 +132,31 @@ async def download_inbound_media_item(
         image_item = item.get("image_item") or {}
         media = image_item.get("media") or {}
         encrypted_query_param = media.get("encrypt_query_param")
+        full_url = media.get("full_url")
         if not isinstance(encrypted_query_param, str):
+            encrypted_query_param = None
+        if not isinstance(full_url, str):
+            full_url = None
+        if encrypted_query_param is None and full_url is None:
             return None
         aes_key_base64 = media.get("aes_key")
         if isinstance(image_item.get("aeskey"), str):
             aes_key_base64 = base64.b64encode(bytes.fromhex(image_item["aeskey"])).decode("ascii")
         buffer = (
-            await download_and_decrypt_buffer(encrypted_query_param, aes_key_base64, cdn_base_url, logger=resolved_logger)
+            await download_and_decrypt_buffer(
+                encrypted_query_param,
+                aes_key_base64,
+                cdn_base_url,
+                full_url=full_url,
+                logger=resolved_logger,
+            )
             if isinstance(aes_key_base64, str)
-            else await download_plain_cdn_buffer(encrypted_query_param, cdn_base_url, logger=resolved_logger)
+            else await download_plain_cdn_buffer(
+                encrypted_query_param,
+                cdn_base_url,
+                full_url=full_url,
+                logger=resolved_logger,
+            )
         )
         target = target_dir / "image.bin"
         target.write_bytes(buffer)
@@ -137,10 +166,21 @@ async def download_inbound_media_item(
         voice_item = item.get("voice_item") or {}
         media = voice_item.get("media") or {}
         encrypted_query_param = media.get("encrypt_query_param")
+        full_url = media.get("full_url")
         aes_key_base64 = media.get("aes_key")
-        if not isinstance(encrypted_query_param, str) or not isinstance(aes_key_base64, str):
+        if not isinstance(encrypted_query_param, str):
+            encrypted_query_param = None
+        if not isinstance(full_url, str):
+            full_url = None
+        if (encrypted_query_param is None and full_url is None) or not isinstance(aes_key_base64, str):
             return None
-        buffer = await download_and_decrypt_buffer(encrypted_query_param, aes_key_base64, cdn_base_url, logger=resolved_logger)
+        buffer = await download_and_decrypt_buffer(
+            encrypted_query_param,
+            aes_key_base64,
+            cdn_base_url,
+            full_url=full_url,
+            logger=resolved_logger,
+        )
         resolved_logger.debug("downloaded voice buffer size=%s, attempting silk transcode", len(buffer))
         wav_buffer = silk_to_wav(buffer, logger=resolved_logger)
         if wav_buffer is not None:
@@ -155,10 +195,21 @@ async def download_inbound_media_item(
         file_item = item.get("file_item") or {}
         media = file_item.get("media") or {}
         encrypted_query_param = media.get("encrypt_query_param")
+        full_url = media.get("full_url")
         aes_key_base64 = media.get("aes_key")
-        if not isinstance(encrypted_query_param, str) or not isinstance(aes_key_base64, str):
+        if not isinstance(encrypted_query_param, str):
+            encrypted_query_param = None
+        if not isinstance(full_url, str):
+            full_url = None
+        if (encrypted_query_param is None and full_url is None) or not isinstance(aes_key_base64, str):
             return None
-        buffer = await download_and_decrypt_buffer(encrypted_query_param, aes_key_base64, cdn_base_url, logger=resolved_logger)
+        buffer = await download_and_decrypt_buffer(
+            encrypted_query_param,
+            aes_key_base64,
+            cdn_base_url,
+            full_url=full_url,
+            logger=resolved_logger,
+        )
         filename = file_item.get("file_name") if isinstance(file_item.get("file_name"), str) else "file.bin"
         target = target_dir / filename
         target.write_bytes(buffer)
@@ -168,10 +219,21 @@ async def download_inbound_media_item(
         video_item = item.get("video_item") or {}
         media = video_item.get("media") or {}
         encrypted_query_param = media.get("encrypt_query_param")
+        full_url = media.get("full_url")
         aes_key_base64 = media.get("aes_key")
-        if not isinstance(encrypted_query_param, str) or not isinstance(aes_key_base64, str):
+        if not isinstance(encrypted_query_param, str):
+            encrypted_query_param = None
+        if not isinstance(full_url, str):
+            full_url = None
+        if (encrypted_query_param is None and full_url is None) or not isinstance(aes_key_base64, str):
             return None
-        buffer = await download_and_decrypt_buffer(encrypted_query_param, aes_key_base64, cdn_base_url, logger=resolved_logger)
+        buffer = await download_and_decrypt_buffer(
+            encrypted_query_param,
+            aes_key_base64,
+            cdn_base_url,
+            full_url=full_url,
+            logger=resolved_logger,
+        )
         target = target_dir / "video.mp4"
         target.write_bytes(buffer)
         return DownloadedMedia(local_path=target, mime_type="video/mp4")
@@ -182,7 +244,8 @@ async def download_inbound_media_item(
 async def upload_buffer_to_cdn(
     *,
     plaintext: bytes,
-    upload_param: str,
+    upload_full_url: str | None = None,
+    upload_param: str | None = None,
     filekey: str,
     cdn_base_url: str,
     aes_key: bytes,
@@ -190,7 +253,12 @@ async def upload_buffer_to_cdn(
 ) -> str:
     resolved_logger = logger or create_sdk_logger().child("transfer")
     ciphertext = encrypt_aes_ecb(plaintext, aes_key)
-    url = build_cdn_upload_url(cdn_base_url=cdn_base_url, upload_param=upload_param, filekey=filekey)
+    if upload_full_url:
+        url = upload_full_url
+    elif upload_param:
+        url = build_cdn_upload_url(cdn_base_url=cdn_base_url, upload_param=upload_param, filekey=filekey)
+    else:
+        raise MediaError("CDN upload URL missing (need upload_full_url or upload_param)")
     resolved_logger.info(
         "upload buffer to cdn filekey=%s plaintext_size=%s ciphertext_size=%s",
         filekey,
@@ -268,13 +336,19 @@ async def prepare_upload(
             "aeskey": aes_key.hex(),
         },
     )
+    upload_full_url = getattr(upload_url_response, "upload_full_url", None)
     upload_param = getattr(upload_url_response, "upload_param", None)
+    if not isinstance(upload_full_url, str) or not upload_full_url:
+        upload_full_url = None
     if not isinstance(upload_param, str) or not upload_param:
-        raise MediaError("getUploadUrl returned no upload_param")
+        upload_param = None
+    if upload_full_url is None and upload_param is None:
+        raise MediaError("getUploadUrl returned no upload URL")
     resolved_logger.debug("upload url prepared filekey=%s", filekey)
 
     download_encrypted_query_param = await upload_buffer_to_cdn(
         plaintext=plaintext,
+        upload_full_url=upload_full_url,
         upload_param=upload_param,
         filekey=filekey,
         cdn_base_url=cdn_base_url,

@@ -93,7 +93,12 @@ class WeChatBotApiClient(AsyncBotApiClient):
                     qrcode,
                 )
                 return {"status": "wait"}
-            raise
+            self._logger.warning(
+                "poll_qrcode_status transport issue, treating as wait qrcode=%s err=%s",
+                qrcode,
+                exc,
+            )
+            return {"status": "wait"}
 
     async def get_updates(
         self,
@@ -281,9 +286,10 @@ class WeChatBotApiClient(AsyncBotApiClient):
         errmsg = raw.get("errmsg")
         self._raise_protocol_error_if_needed(errcode, errmsg)
         self._logger.debug(
-            "get_upload_url ok account_id=%s has_upload_param=%s",
+            "get_upload_url ok account_id=%s has_upload_param=%s has_upload_full_url=%s",
             session.account_id,
             bool(response.upload_param),
+            bool(response.upload_full_url),
         )
         return response
 

@@ -143,6 +143,12 @@ session = await client.wait_for_login(qrcode.qrcode)
 print(session.account_id)
 ```
 
+登录行为与当前 Weixin 参考实现保持一致：
+
+- 二维码获取默认走内置登录网关 `https://ilinkai.weixin.qq.com`
+- 当扫码状态返回 `scaned_but_redirect` 时，SDK 会自动切换到服务端下发的 `redirect_host` 继续轮询
+- 长轮询阶段遇到网关超时或短暂网络错误时，会按等待状态继续重试，而不是立刻终止登录
+
 ### 复用已持久化账号
 
 你可以通过 `get_account_status(...)` 和 `is_account_session_alive(...)` 检查账号是否已保存且仍可用：
@@ -152,6 +158,17 @@ status = await client.get_account_status(account_id)
 if status.logged_in and status.session is not None:
 	alive = await client.is_account_session_alive(account_id)
 ```
+
+## CDN 与媒体行为
+
+SDK 现在同时兼容新版和旧版 CDN 返回格式：
+
+- 上传时优先使用 `getUploadUrl` 返回的 `upload_full_url`
+- 若服务端未返回 `upload_full_url`，则回退到旧版 `upload_param` 拼接上传地址
+- 下载入站媒体时优先使用消息里的 `media.full_url`
+- 若消息里没有 `full_url`，则回退到 `encrypt_query_param` 拼接下载地址
+
+这意味着当服务端切换到直接下发完整 CDN URL 时，Python SDK 不需要额外适配即可继续上传和下载图片、视频、文件、语音媒体。
 
 ## 状态持久化
 
@@ -246,6 +263,12 @@ client = AsyncWeChatBotClient.create(logger=logger, debug=True)
 
 ```bash
 pip install -e .
+```
+
+运行最小回归测试：
+
+```bash
+python -m unittest discover -s tests
 ```
 
 示例运行：

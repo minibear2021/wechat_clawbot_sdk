@@ -22,10 +22,12 @@ DEFAULT_BOT_TYPE = 3
 class ActiveLogin:
     qrcode: str
     qrcode_image_content: str
+    initial_base_url: str
     route_tag: str | None
     bot_type: int
     started_at_monotonic: float
     refresh_count: int = 0
+    current_poll_base_url: str | None = None
 
 
 class AsyncQrLoginService:
@@ -58,10 +60,12 @@ class AsyncQrLoginService:
         self._active_logins[qrcode] = ActiveLogin(
             qrcode=qrcode,
             qrcode_image_content=qrcode_image_content,
+            initial_base_url=self._base_url,
             route_tag=route_tag,
             bot_type=bot_type,
             started_at_monotonic=self._monotonic(),
             refresh_count=0,
+            current_poll_base_url=self._base_url,
         )
         self._purge_expired_logins()
         return session
@@ -84,18 +88,20 @@ class AsyncQrLoginService:
         current_qrcode = qrcode
 
         while self._monotonic() < deadline:
+            current_poll_base_url = active_login.current_poll_base_url or active_login.initial_base_url
             payload = await self._api_client.poll_qrcode_status(
                 current_qrcode,
-                base_url=self._base_url,
+                base_url=current_poll_base_url,
                 route_tag=route_tag or active_login.route_tag,
             )
             status = self._require_string(payload, "status")
             self._logger.debug(
-                "qrcode status=%s qrcode=%s refresh_count=%s route_tag=%s",
+                "qrcode status=%s qrcode=%s refresh_count=%s route_tag=%s poll_base_url=%s",
                 status,
                 current_qrcode,
                 active_login.refresh_count,
                 route_tag or active_login.route_tag,
+                current_poll_base_url,
             )
 
             if status == "wait":
@@ -113,6 +119,23 @@ class AsyncQrLoginService:
                     current_qrcode,
                     active_login.refresh_count,
                 )
+                await sleep(1.0)
+                continue
+
+            if status == "scaned_but_redirect":
+                redirect_host = self._optional_string(payload, "redirect_host")
+                if redirect_host:
+                    active_login.current_poll_base_url = f"https://{redirect_host}"
+                    self._logger.info(
+                        "qrcode polling redirected qrcode=%s redirect_host=%s",
+                        current_qrcode,
+                        redirect_host,
+                    )
+                else:
+                    self._logger.warning(
+                        "qrcode redirect status missing redirect_host qrcode=%s",
+                        current_qrcode,
+                    )
                 await sleep(1.0)
                 continue
 

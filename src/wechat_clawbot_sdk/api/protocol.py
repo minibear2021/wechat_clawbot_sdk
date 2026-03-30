@@ -61,6 +61,7 @@ class GetUploadUrlRequest:
 class GetUploadUrlResponse:
     upload_param: str | None = None
     thumb_upload_param: str | None = None
+    upload_full_url: str | None = None
 
 
 @dataclass(slots=True)
@@ -73,6 +74,7 @@ class CdnMedia:
     encrypt_query_param: str | None = None
     aes_key: str | None = None
     encrypt_type: int | None = None
+    full_url: str | None = None
 
 
 @dataclass(slots=True)
